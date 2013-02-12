@@ -1,0 +1,54 @@
+#!/bin/bash
+# gem install terminal-notifier
+
+# security add-internet-password -s testflightapp.com -U -T "" -a ${USER}_API  -w <TOKEN>
+# security add-internet-password -s testflightapp.com -U -T "" -a ${USER}_TEAM -w <TOKEN>
+API_TOKEN=` security find-internet-password -s testflightapp.com -a ${USER}_API  -g 2>&1 | grep password | sed 's/password: \"\(.*\)\"/\1/'`
+TEAM_TOKEN=`security find-internet-password -s testflightapp.com -a ${USER}_TEAM -g 2>&1 | grep password | sed 's/password: \"\(.*\)\"/\1/'`
+
+
+git archive --format=tar --prefix=$VERSION/ "$NAME-$VERSION" | (cd $DIR && tar xf -)
+
+
+SDK="iphoneos6.1" # iphonesimulator6.1
+NOTES='Buildscript'
+ENDPOINT=http://testflightapp.com/api/builds.json
+CONFIGURATION_NAME="Ad Hoc"
+DISTRIBUTION_LISTS='Internal, QA'
+CODE_SIGN_IDENTITY="iPhone Distribution: Development Seed"
+PROVISIONING_PROFILE="Provisioning Profiles/.mobileprovision"
+
+DATE=$( /bin/date +"%Y-%m-%d" )
+ARCHIVE=$( /bin/ls -t "${HOME}/Library/Developer/Xcode/Archives/${DATE}" | /usr/bin/grep xcarchive | /usr/bin/sed -n 1p )
+DSYM="${HOME}/Library/Developer/Xcode/Archives/${DATE}/${ARCHIVE}/dSYMs/${PRODUCT_NAME}.app.dSYM"
+APP="${HOME}/Library/Developer/Xcode/Archives/${DATE}/${ARCHIVE}/Products/Applications/${PRODUCT_NAME}.app"
+
+# /usr/bin/zip -r "/tmp/${PRODUCT_NAME}.dSYM.zip" "${DSYM}"
+
+
+xcodebuild \
+  -workspace *.xcworkspace \
+  -scheme App \
+  -configuration Release \
+  -sdk $SDK
+
+if [ $? != 0 ]; then
+  exit 1
+fi
+ 
+xcrun -sdk $SDK PackageApplication \
+  -v "${PROJECT_BUILDDIR}/${PROJECT_NAME}.app" \
+  -o "${BUILD_HISTORY_DIR}/${APPLICATION_NAME}.ipa" \
+  --sign "${DEVELOPER_NAME}" \
+  --embed "${PROVISONING_PROFILE}"
+
+curl $ENDPOINT
+    -F file=@"testflightapp.ipa"
+    -F dsym=@"testflightapp.app.dSYM.zip"
+    -F api_token='your_api_token' 
+    -F team_token='your_team_token' 
+    -F notes='This build was uploaded via the upload API' 
+    -F notify=True 
+    -F distribution_lists='Internal, QA'
+
+open "https://testflightapp.com/dashboard/builds/"
