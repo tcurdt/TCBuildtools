@@ -23,7 +23,7 @@ if [ -d ".git" ]; then
   NUMBER="`$GIT log --oneline | wc -l | tr -cd '[[:digit:]]'`"
 
   # get the revision
-  REVISION="`$GIT rev-parse --short HEAD 2>/dev/null`"
+  REVISION="`$GIT rev-parse --short HEAD 2>/dev/null | tr -cd '[[:xdigit:]]'`"
   if [ -z "$REVISION" ]; then
     # still empty means there has not been a comit yet
     REVISION=$REVISION_DEFAULT
@@ -49,10 +49,10 @@ YEAR=`date +%Y`
 
 # create the file for the preprocessor
 if [ -z "$PROJECT_TEMP_DIR" ]; then
-  echo "BUILD_RELEASE = $RELEASE"
-  echo "BUILD_NUMBER = $NUMBER"
-  echo "BUILD_REVISION = $REVISION"
-  echo "BUILD_YEAR = $YEAR"
+  echo "BUILD_RELEASE = '$RELEASE'"
+  echo "BUILD_NUMBER = '$NUMBER'"
+  echo "BUILD_REVISION = '$REVISION'"
+  echo "BUILD_YEAR = '$YEAR'"
 else
   PREFIX_FILE="$PROJECT_TEMP_DIR/Info.plist.prefix"
   echo "Created Info.plist prefix file $PREFIX_FILE for $RELEASE $REVISION"
