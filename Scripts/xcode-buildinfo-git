@@ -19,6 +19,9 @@ if [ -d ".git" ]; then
     COMMITS_SINCE_TAG=$(git rev-list HEAD --not "$RELEASE" | wc -l | tr -cd '[[:digit:]]' | sed 's/^0$//')
   fi
 
+  # get the build number
+  NUMBER="`$GIT log --oneline | wc -l | tr -cd '[[:digit:]]'`"
+
   # get the revision
   REVISION="`$GIT rev-parse --short HEAD 2>/dev/null`"
   if [ -z "$REVISION" ]; then
@@ -47,12 +50,14 @@ YEAR=`date +%Y`
 # create the file for the preprocessor
 if [ -z "$PROJECT_TEMP_DIR" ]; then
   echo "BUILD_RELEASE = $RELEASE"
+  echo "BUILD_NUMBER = $NUMBER"
   echo "BUILD_REVISION = $REVISION"
   echo "BUILD_YEAR = $YEAR"
 else
   PREFIX_FILE="$PROJECT_TEMP_DIR/Info.plist.prefix"
   echo "Created Info.plist prefix file $PREFIX_FILE for $RELEASE $REVISION"
-  echo "#define BUILD_RELEASE  $RELEASE"   > "$PREFIX_FILE"
+  echo "#define BUILD_RELEASE $RELEASE" > "$PREFIX_FILE"
+  echo "#define BUILD_NUMBER $NUMBER" >> "$PREFIX_FILE"
   echo "#define BUILD_REVISION $REVISION" >> "$PREFIX_FILE"
   echo "#define BUILD_YEAR $YEAR" >> "$PREFIX_FILE"
 fi
