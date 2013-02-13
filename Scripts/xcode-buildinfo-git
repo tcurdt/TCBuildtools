@@ -36,7 +36,7 @@ if [ -d ".git" ]; then
 
   if [ "${COMMITS_SINCE_TAG}M${NOT_COMMITTED}" != "M" ]; then
     echo "WARNING: Build is dirty."
-    REVISION="$REVISION+${COMMITS_SINCE_TAG}M${NOT_COMMITTED}"
+    REVISION="${REVISION}T${COMMITS_SINCE_TAG}M${NOT_COMMITTED}"
   fi
 
 else
@@ -49,16 +49,18 @@ YEAR=`date +%Y`
 
 # create the file for the preprocessor
 if [ -z "$PROJECT_TEMP_DIR" ]; then
-  echo "BUILD_RELEASE = '$RELEASE'"
-  echo "BUILD_NUMBER = '$NUMBER'"
+  echo "BUILD_RELEASE  = '$RELEASE'"
+  echo "BUILD_NUMBER   = '$NUMBER'"
   echo "BUILD_REVISION = '$REVISION'"
-  echo "BUILD_YEAR = '$YEAR'"
+  echo "BUILD_YEAR     = '$YEAR'"
 else
   PREFIX_FILE="$PROJECT_TEMP_DIR/Info.plist.prefix"
   echo "Created Info.plist prefix file $PREFIX_FILE for $RELEASE $REVISION"
-  echo "#define BUILD_RELEASE $RELEASE" > "$PREFIX_FILE"
-  echo "#define BUILD_NUMBER $NUMBER" >> "$PREFIX_FILE"
-  echo "#define BUILD_REVISION $REVISION" >> "$PREFIX_FILE"
-  echo "#define BUILD_YEAR $YEAR" >> "$PREFIX_FILE"
+  (
+    echo "#define BUILD_RELEASE  $RELEASE"
+    echo "#define BUILD_NUMBER   $NUMBER"
+    echo "#define BUILD_REVISION $REVISION"
+    echo "#define BUILD_YEAR     $YEAR"
+  ) > "$PREFIX_FILE"
 fi
 
