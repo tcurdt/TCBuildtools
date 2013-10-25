@@ -1,1 +1,0 @@
-The code is released under the Apache License 2.0.

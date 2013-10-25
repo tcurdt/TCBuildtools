@@ -1,5 +1,10 @@
 #!/usr/bin/env ruby
+
 require 'set'
+require 'nokogiri'
+
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
 
 class Translation
   attr_reader :pre, :key, :value, :line, :language
@@ -120,20 +125,54 @@ class Strings
 end
 
 
-def xib_keys(dirs)
+def xib_keys(dirs, verbose)
   keys = Set.new
-  Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.xib') }, 0).each do |path|
+  Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.xib') }, 0).each do |path|    
     File.open(path, 'r') do |file|
-      while (line = file.gets)
-        key = line.scan(/<string key="NSTitle">(.*?)<\/string>/).flatten.first
-        keys.add(key) if key
+      puts "reading #{path}" if verbose
+      doc = Nokogiri::XML(file)
+
+      doc.xpath('//string[key="NSTitle"]').each do |node|
+        keys.add(node.content)
       end
+
+      doc.xpath('//label|//button').each do |node|
+        label = node["userLabel"]
+
+        ignored = label and label.start_with? '!'
+
+        node.xpath('.//*[@text]|.').each do |node|
+          key = node["text"]
+          next if !key or key == ""
+          puts "text = #{key} #{ignored ? '(ignored)' : ''}" if verbose
+          keys.add(key) unless ignored
+        end
+
+        node.xpath('.//*[@title]|.').each do |node|
+          key = node["title"]
+          next if !key or key == ""
+          puts "title = #{key} #{ignored ? '(ignored)' : ''}" if verbose
+          keys.add(key) unless ignored
+        end
+      end
+
+      # while (line = file.gets)
+      #   label = line.scan(/ userLabel="(.*?)"/).flatten.first
+      #   next if label and label.start_with? '!'
+
+      #   key = line.scan(/<string key="NSTitle">(.*?)<\/string>/).flatten.first
+      #   key = line.scan(/ text="(.*?)"/).flatten.first if !key
+      #   key = line.scan(/ title="(.*?)"/).flatten.first if !key
+
+      #   puts "key = #{key}" if key
+      #   keys.add(key) if key
+      # end
     end
   end
   keys
 end
 
-def strings(dirs)
+def strings(dirs, verbose)
   ret = []
   Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.lproj/*.strings') }, 0).each do |path|
     language = path.scan(/([^\/]*)\.lproj/).flatten.first
@@ -157,7 +196,7 @@ def keys_in_line(line)
   line.scan(/NSLocalizedString\(@"(.*?)",/).flatten
 end
 
-def code_keys(dirs)
+def code_keys(dirs, verbose)
   Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.m') }, 0).each do |path|
     File.open(path, 'r') do |file|
       lc = 0
@@ -171,10 +210,10 @@ def code_keys(dirs)
   end
 end
 
-def verify(dirs)
+def verify(dirs, verbose)
   ret = 0
-  strings = strings(dirs)
-  xib_keys = xib_keys(dirs)
+  strings = strings(dirs, verbose)
+  xib_keys = xib_keys(dirs, verbose)
   keys = strings_keys(strings) + xib_keys
 
   # check for each key in all string files
@@ -195,7 +234,7 @@ def verify(dirs)
   end
 
   unused_keys = Set.new(keys)
-  code_keys(dirs) do |path,lc,key|
+  code_keys(dirs, verbose) do |path,lc,key|
     if keys.include?(key)
       unused_keys.delete(key)
     else
@@ -228,9 +267,9 @@ ret = if ARGV.length == 0
     reject = File.open(ignorefile) { |f| f.readlines }.map { |l| l.strip }
     puts "Ingoring #{reject}"
   end
-  verify(Dir.glob(File.join(ENV['PROJECT_DIR'] || ".", "*"), 0).reject { |s| reject.include?(File.basename(s)) })
+  verify(Dir.glob(File.join(ENV['PROJECT_DIR'] || ".", "*"), 0).reject { |s| reject.include?(File.basename(s)) }, true)
 else
-  verify(ARGV)
+  verify(ARGV, false)
 end
 
 exit ret
