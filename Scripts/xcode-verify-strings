@@ -132,8 +132,10 @@ def xib_keys(dirs, verbose)
       puts "reading #{path}" if verbose
       doc = Nokogiri::XML(file)
 
-      doc.xpath('//string[key="NSTitle"]').each do |node|
-        keys.add(node.content)
+      doc.xpath('//string[@key="NSTitle"]').each do |node|
+        key = node.content
+        next if !key or key == ""
+        keys.add(key)
       end
 
       doc.xpath('//label|//button').each do |node|
@@ -155,18 +157,6 @@ def xib_keys(dirs, verbose)
           keys.add(key) unless ignored
         end
       end
-
-      # while (line = file.gets)
-      #   label = line.scan(/ userLabel="(.*?)"/).flatten.first
-      #   next if label and label.start_with? '!'
-
-      #   key = line.scan(/<string key="NSTitle">(.*?)<\/string>/).flatten.first
-      #   key = line.scan(/ text="(.*?)"/).flatten.first if !key
-      #   key = line.scan(/ title="(.*?)"/).flatten.first if !key
-
-      #   puts "key = #{key}" if key
-      #   keys.add(key) if key
-      # end
     end
   end
   keys
