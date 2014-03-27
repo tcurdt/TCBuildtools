@@ -43,3 +43,10 @@ The code is released under the Apache License 2.0.
 
 	    Pods
 
+
+# Turn FIXME/TODOs into Xcode warnings
+
+1. create an (or add to an existing) "Aggregate Target" called "Buildtools"
+2. add a "run script" build phase to the new target calling
+
+      $PROJECT_DIR/Pods/TCBuildtools/Scripts/xcode-todo-warnings
