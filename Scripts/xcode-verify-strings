@@ -36,16 +36,19 @@ class Strings
     @path = path
     File.open(path, 'r') do |file|
       # puts "Loading #{path}"
+
       pre = ''
       lc = 0
       while (line = file.gets)
         lc += 1
-        # next if line.match(/#{@language}/)
-        line = "/* */" if line.match(/No comment provided/)
+
+        # remove/ignore empty lines
         next if line.match(/^\s*$/)
 
-        k, v = line.scan(/"(.*)"\s*=\s*"(.*)"/).flatten
+        k, v = line.scan(/^"(.*)"\s*=\s*"(.*)"/).flatten
+
         # puts "#{@language}: #{k} = #{v}"
+
         if k and v
           @translations << Translation.new(pre, lc, k, v, language, ! (line =~ /#\s+external\s*$/))
           pre = ''
@@ -70,96 +73,14 @@ class Strings
   end
 
   def save
-    # @translations.sort! { |x,y| x.key.downcase <=> y.key.downcase }
+    @translations.sort! { |x,y| x.key.downcase <=> y.key.downcase }
     File.open(@path, 'w') do |file|
       @translations.each do |t|
-        file.puts "#{t.pre}"
+        # file.puts "{t.pre}"
         file.puts "\"#{t.key}\" = \"#{t.value}\";"
-        file.puts
       end
     end
   end
-end
-
-class Strings
-  attr_reader :path, :language
-
-  def initialize(language)
-    @translations = []
-    @language = language
-  end
-
-  def load(path)
-    @path = path
-    File.open(path, 'r') do |file|
-      # puts "Loading #{path}"
-      pre = ''
-      lc = 0
-      while (line = file.gets)
-        lc += 1
-        line = "/* */" if line.match(/No comment provided/)
-        next if line.match(/^\s*$/)
-        k, v = line.scan(/"(.*)"\s*=\s*"(.*)"/).flatten
-        if k and v
-          @translations << Translation.new(pre, lc, k, v, language, ! (line =~ /#\s+external\s*$/))
-          pre = ''
-        else
-          pre += line
-        end
-      end
-    end
-    self
-  end
-
-  def keys
-    @translations.map { |t| t.key }
-  end
-
-  def [](key)
-    @translations.select { |t| t.key == key }
-  end
-
-  def <<(translation)
-    @translations << translation
-  end
-end
-
-
-def xib_keys(dirs, verbose)
-  keys = Set.new
-  Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.xib') }, 0).each do |path|    
-    File.open(path, 'r') do |file|
-      puts "reading #{path}" if verbose
-      doc = Nokogiri::XML(file)
-
-      doc.xpath('//string[@key="NSTitle"]').each do |node|
-        key = node.content
-        next if !key or key == ""
-        keys.add(key)
-      end
-
-      doc.xpath('//label|//button').each do |node|
-        label = node["userLabel"]
-
-        ignored = label and label.start_with? '!'
-
-        node.xpath('.//*[@text]|.').each do |node|
-          key = node["text"]
-          next if !key or key == ""
-          puts "text = #{key} #{ignored ? '(ignored)' : ''}" if verbose
-          keys.add(key) unless ignored
-        end
-
-        node.xpath('.//*[@title]|.').each do |node|
-          key = node["title"]
-          next if !key or key == ""
-          puts "title = #{key} #{ignored ? '(ignored)' : ''}" if verbose
-          keys.add(key) unless ignored
-        end
-      end
-    end
-  end
-  keys
 end
 
 def strings(dirs, verbose)
@@ -179,6 +100,45 @@ def strings_keys(strings)
   end
   keys
 end
+
+# scan xib files
+
+def xib_keys(dirs, verbose)
+  Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.xib') }, 0).each do |path|
+    File.open(path, 'r') do |file|
+      puts "reading #{path}" if verbose
+      doc = Nokogiri::XML(file)
+
+      doc.xpath('//string[@key="NSTitle"]').each do |node|
+        key = node.content
+        next if !key or key == ""
+        yield path, 0, key
+      end
+
+      doc.xpath('//label|//button').each do |node|
+        label = node["userLabel"]
+
+        ignored = label and label.start_with? '!'
+
+        node.xpath('.//*[@text]|.').each do |node|
+          key = node["text"]
+          next if !key or key == ""
+          puts "text = #{key} #{ignored ? '(ignored)' : ''}" if verbose
+          yield path, 0, key unless ignored
+        end
+
+        node.xpath('.//*[@title]|.').each do |node|
+          key = node["title"]
+          next if !key or key == ""
+          puts "title = #{key} #{ignored ? '(ignored)' : ''}" if verbose
+          yield path, 0, key unless ignored
+        end
+      end
+    end
+  end
+end
+
+# scan source files
 
 def keys_in_line(line)
   return [] if line.start_with?('//')
@@ -200,52 +160,97 @@ def code_keys(dirs, verbose)
   end
 end
 
+# putting it together
+
 def verify(dirs, verbose)
   ret = 0
+
   strings = strings(dirs, verbose)
-  xib_keys = xib_keys(dirs, verbose)
-  keys = strings_keys(strings) + xib_keys
 
-  # check for each key in all string files
-  keys.each do |k|
-    translations = []
-    strings.each do |s|
-      values = s[k]
-      translations += values
-      if values.size == 0
-        puts "%s:%d: warning: missing key '%s'" % [ s.path, 0, k ]
-        s << Translation.new('', 0, k, '', s.language)
-      elsif values.size > 1
-        values.each do |t|
-          puts "%s:%d: error: duplicate key '%s'" % [ s.path, t.line, k ]
-        end
-      end
-    end
-  end
+  # union of all the keys in the strings files
+  strings_keys = strings_keys(strings)
+  unused_keys = Set.new(strings_keys)
+  missing_keys = Set.new
 
-  unused_keys = Set.new(keys)
   code_keys(dirs, verbose) do |path,lc,key|
-    if keys.include?(key)
+    if strings_keys.include?(key)
       unused_keys.delete(key)
     else
-      puts "%s:%d: error: missing key '%s'" % [ path, lc, key ]
+      missing_keys << key
+      puts "%s:%d: error: code missing key '%s'" % [ path, lc, key ]
       ret = 1
     end
   end
 
-  unused_keys.subtract(xib_keys)
+  xib_keys(dirs, verbose) do |path,lc,key|
+    if strings_keys.include?(key)
+      unused_keys.delete(key)
+    else
+      missing_keys << key
+      puts "%s:%d: error: xib missing key '%s'" % [ path, lc, key ]
+      ret = 1
+    end
+  end
+
+  duplicates = false
+
+  # check for each key in all string files
+  (strings_keys + missing_keys).each do |k|
+    strings.each do |s|
+      values = s[k]
+      duplicates |= values.size > 1
+      # puts "#{s.language}: #{k} -> #{values.size}"
+      case values.size
+        when 0
+          puts "%s:%d: error: (%s) missing key '%s'" % [ s.path, 1, s.language, k ]
+          missing_keys << k
+          ret = 1
+        when 1
+          values.each do |t|
+            if t.value.strip == ""
+              puts "%s:%d: warning: (%s) empty key '%s'" % [ s.path, t.line, s.language, k ]
+            end
+          end
+        else
+          values.each do |t|
+            puts "%s:%d: error: (%s) duplicate key '%s'" % [ s.path, t.line, s.language, k ]
+            ret = 1
+          end
+        end
+      # end
+    end
+  end
 
   # print unused keys
-  unused_keys.each do |key|
+  unused_keys.each do |k|
     strings.each do |s|
-      s[key].each do |t|
-        if t.track_unused?
-          puts "%s:%d: warning: unused key '%s'" % [ s.path, t.line, key ]
-          ret = 1
+      values = s[k]
+      if values.size > 0
+        values.each do |t|
+          # if t.track_unused?
+            puts "%s:%d: warning: unused key '%s'" % [ s.path, t.line, k ]
+          # end
         end
       end
     end
   end
+
+  # add missing keys
+  # if !duplicates && missing_keys.length > 0
+    missing_keys.each do |k|
+      strings.each do |s|
+        values = s[k]
+        if values.size == 0
+          puts "adding missing key '#{k}' to #{s.language}"
+          s << Translation.new('', 1, k, k, s.language)
+        end
+      end
+    end
+    strings.each do |s|
+      puts "writing #{s.path}"
+      s.save
+    end
+  # end
 
   return ret
 end
