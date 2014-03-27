@@ -1,0 +1,7 @@
+#!/bin/sh
+
+KEYWORDS="TODO|FIXME"
+
+-type d \( -path dir1 -o -path dir2 -o -path dir3 \)
+
+find "${SRCROOT}" -not -path "${SRCROOT}/Pods/*" -not -path "${SRCROOT}/Research/*" \( -name "*.h" -or -name "*.m" \) -print0 | xargs -0 egrep --with-filename --line-number --only-matching "($KEYWORDS).*\$" | perl -p -e "s/($KEYWORDS)/ warning: \$1/"
