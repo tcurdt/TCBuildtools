@@ -1,66 +1,60 @@
 #!/bin/bash
 
-# find git
-GIT=`which git` # /usr/local/bin/git
-
 # default values
-VERSION_DEFAULT="0.1"
-REVISION_DEFAULT="0"
+DEFAULT_BUILD_VERSION="0.1"
+DEFAULT_BUILD_NUMBER="0"
+DEFAULT_BUILD_REVISION="0"
 
 # only try to extract if the project uses git
 if [ -d ".git" ]; then
 
   # the most recent tag is the next release
-  VERSION=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1 HEAD) 2>/dev/null)
-  if [ -z "$VERSION" ]; then
-    VERSION=$VERSION_DEFAULT
-    echo "WARNING: Build is not tagged."
-  else
-    COMMITS_SINCE_TAG=$(git rev-list HEAD --not "$VERSION" | wc -l | tr -cd '[[:digit:]]' | sed 's/^0$//')
+  # BUILD_VERSION=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1 HEAD) 2>/dev/null)
+  if [ -z "$BUILD_VERSION" ]; then
+    BUILD_VERSION=$DEFAULT_BUILD_VERSION
+    # echo "WARNING: Build is not tagged."
   fi
 
   # get the build number
-  NUMBER="`$GIT log --oneline | wc -l | tr -cd '[[:digit:]]'`"
+  BUILD_NUMBER=$(git log --oneline | wc -l | tr -cd '[[:digit:]]')
 
   # get the revision
-  REVISION="`$GIT rev-parse --short HEAD 2>/dev/null | tr -cd '[[:xdigit:]]'`"
-  if [ -z "$REVISION" ]; then
+  BUILD_REVISION=$(git rev-parse --short HEAD 2>/dev/null | tr -cd '[[:xdigit:]]')
+  if [ -z "$BUILD_REVISION" ]; then
     # still empty means there has not been a comit yet
-    REVISION=$REVISION_DEFAULT
+    BUILD_REVISION=$DEFAULT_BUILD_REVISION
   fi
 
-  DESCRIBE=`$GIT describe --dirty --tags 2>/dev/null`
-  if [ "$DESCRIBE" != "$VERSION" ]; then
-    NOT_COMMITTED=$(git status --porcelain 2>/dev/null | egrep "^(M| M|A| A|\?\?)" | wc -l | tr -cd '[[:digit:]]' | sed 's/^0$//')
-  fi
-
+  # more information on intermediate builds
+  COMMITS_SINCE_TAG=$(git rev-list HEAD --not "$BUILD_VERSION" 2>/dev/null | wc -l | tr -cd '[[:digit:]]' | sed 's/^0$//')
+  NOT_COMMITTED=$(git status --porcelain 2>/dev/null | egrep "^(M| M|A| A|\?\?)" | wc -l | tr -cd '[[:digit:]]' | sed 's/^0$//')
   if [ "${COMMITS_SINCE_TAG}M${NOT_COMMITTED}" != "M" ]; then
     echo "WARNING: Build is dirty."
-    REVISION="${REVISION}T${COMMITS_SINCE_TAG}M${NOT_COMMITTED}"
+    BUILD_REVISION="${BUILD_REVISION}T${COMMITS_SINCE_TAG}M${NOT_COMMITTED}"
   fi
 
 else
   # no git, no revision, default first version
-  VERSION=$VERSION_DEFAULT
-  REVISION=$REVISION_DEFAULT
+  BUILD_VERSION=$DEFAULT_BUILD_VERSION
+  BUILD_REVISION=$DEFAULT_BUILD_REVISION
+  BUILD_NUMBER=$DEFAULT_BUILD_NUMBER
 fi
 
-YEAR=`date +%Y`
+BUILD_YEAR=`date +%Y`
 
 # create the file for the preprocessor
 if [ -z "$PROJECT_TEMP_DIR" ]; then
-  echo "BUILD_VERSION  = '$VERSION'"
-  echo "BUILD_NUMBER   = '$NUMBER'"
-  echo "BUILD_REVISION = '$REVISION'"
-  echo "BUILD_YEAR     = '$YEAR'"
+  echo "BUILD_VERSION  = '$BUILD_VERSION'"
+  echo "BUILD_NUMBER   = '$BUILD_NUMBER'"
+  echo "BUILD_REVISION = '$BUILD_REVISION'"
+  echo "BUILD_YEAR     = '$BUILD_YEAR'"
 else
   PREFIX_FILE="$PROJECT_TEMP_DIR/Info.plist.prefix"
-  echo "Created Info.plist prefix file $PREFIX_FILE for $VERSION $REVISION"
+  echo "Created Info.plist prefix file $PREFIX_FILE for $BUILD_VERSION $BUILD_VERSION"
   (
-    echo "#define BUILD_VERSION  $VERSION"
-    echo "#define BUILD_NUMBER   $NUMBER"
-    echo "#define BUILD_REVISION $REVISION"
-    echo "#define BUILD_YEAR     $YEAR"
+    echo "#define BUILD_VERSION  $BUILD_VERSION"
+    echo "#define BUILD_NUMBER   $BUILD_NUMBER"
+    echo "#define BUILD_REVISION $BUILD_REVISION"
+    echo "#define BUILD_YEAR     $BUILD_YEAR"
   ) > "$PREFIX_FILE"
 fi
-
