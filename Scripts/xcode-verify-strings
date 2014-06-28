@@ -122,16 +122,19 @@ def xib_keys(dirs, verbose)
       end
 
       doc.xpath('//label|//button|//textField').each do |node|
-        label = node.xpath('ancestor-or-self::*[@userLabel]/@userLabel').first().to_s
+        label = node["userLabel"] || node.xpath('ancestor-or-self::*[@userLabel]/@userLabel').first().to_s
         next if label == "File's Owner"
         ignore = label.start_with? '!'
-        next if ignore
         [ "text", "title", "placeholder" ].each do |attr|
           node.xpath(".//*[@#{attr}]|.").each do |n|
             key = n[attr]
             next if !key or key == ""
-            puts " #{attr} = '#{key}' (#{label})" if verbose
-            yield path, 0, key unless ignore
+            if ignore
+              puts " ! #{attr} = '#{key}' (#{label})" if verbose
+            else
+              puts " #{attr} = '#{key}' (#{label})" if verbose
+              yield path, 0, key unless ignore
+            end
           end
         end
       end
@@ -251,7 +254,7 @@ def verify(dirs, verbose, fix)
   # remove unused keys
   unused_keys.each do |k|
     strings.each do |s|
-      puts "removing missing key '#{k}' from #{s.language}"
+      puts "removing unused key '#{k}' from #{s.language}"
       s.remove(k)
     end
   end
