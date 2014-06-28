@@ -60,6 +60,10 @@ class Strings
     self
   end
 
+  def remove(key)
+    @translations = @translations.reject { |t| t.key == key }
+  end
+
   def keys
     @translations.map { |t| t.key }
   end
@@ -105,6 +109,7 @@ end
 
 def xib_keys(dirs, verbose)
   Dir.glob(dirs.map { |arg| File.join(arg, '/**/*.xib') }, 0).each do |path|
+    # next unless path =~ /SignUp/
     File.open(path, 'r') do |file|
       puts "reading #{path}" if verbose
       doc = Nokogiri::XML(file)
@@ -112,28 +117,25 @@ def xib_keys(dirs, verbose)
       doc.xpath('//string[@key="NSTitle"]').each do |node|
         key = node.content
         next if !key or key == ""
+        # puts " string = '#{key}'" if verbose
         yield path, 0, key
       end
 
-      doc.xpath('//label|//button').each do |node|
-        label = node["userLabel"]
-
-        ignored = label and label.start_with? '!'
-
-        node.xpath('.//*[@text]|.').each do |node|
-          key = node["text"]
-          next if !key or key == ""
-          puts "text = #{key} #{ignored ? '(ignored)' : ''}" if verbose
-          yield path, 0, key unless ignored
-        end
-
-        node.xpath('.//*[@title]|.').each do |node|
-          key = node["title"]
-          next if !key or key == ""
-          puts "title = #{key} #{ignored ? '(ignored)' : ''}" if verbose
-          yield path, 0, key unless ignored
+      doc.xpath('//label|//button|//textField').each do |node|
+        label = node.xpath('ancestor-or-self::*[@userLabel]/@userLabel').first().to_s
+        next if label == "File's Owner"
+        ignore = label.start_with? '!'
+        next if ignore
+        [ "text", "title", "placeholder" ].each do |attr|
+          node.xpath(".//*[@#{attr}]|.").each do |n|
+            key = n[attr]
+            next if !key or key == ""
+            puts " #{attr} = '#{key}' (#{label})" if verbose
+            yield path, 0, key unless ignore
+          end
         end
       end
+
     end
   end
 end
@@ -162,13 +164,14 @@ end
 
 # putting it together
 
-def verify(dirs, verbose)
+def verify(dirs, verbose, fix)
   ret = 0
 
   strings = strings(dirs, verbose)
 
   # union of all the keys in the strings files
   strings_keys = strings_keys(strings)
+
   unused_keys = Set.new(strings_keys)
   missing_keys = Set.new
 
@@ -192,6 +195,16 @@ def verify(dirs, verbose)
     end
   end
 
+  # strings_keys.each do |o|
+  #   puts "key = '#{o}'"
+  # end
+  # unused_keys.each do |o|
+  #   puts "unused = '#{o}'"
+  # end
+  # missing_keys.each do |o|
+  #   puts "missing = '#{o}'"
+  # end
+
   duplicates = false
 
   # check for each key in all string files
@@ -201,23 +214,22 @@ def verify(dirs, verbose)
       duplicates |= values.size > 1
       # puts "#{s.language}: #{k} -> #{values.size}"
       case values.size
-        when 0
-          puts "%s:%d: error: (%s) missing key '%s'" % [ s.path, 1, s.language, k ]
-          missing_keys << k
-          ret = 1
-        when 1
-          values.each do |t|
-            if t.value.strip == ""
-              puts "%s:%d: warning: (%s) empty key '%s'" % [ s.path, t.line, s.language, k ]
-            end
-          end
-        else
-          values.each do |t|
-            puts "%s:%d: error: (%s) duplicate key '%s'" % [ s.path, t.line, s.language, k ]
-            ret = 1
+      when 0
+        puts "%s:%d: error: (%s) missing key '%s'" % [ s.path, 1, s.language, k ]
+        missing_keys << k
+        ret = 1
+      when 1
+        values.each do |t|
+          if t.value.strip == ""
+            puts "%s:%d: warning: (%s) empty key '%s'" % [ s.path, t.line, s.language, k ]
           end
         end
-      # end
+      else
+        values.each do |t|
+          puts "%s:%d: error: (%s) duplicate key '%s'" % [ s.path, t.line, s.language, k ]
+          ret = 1
+        end
+      end
     end
   end
 
@@ -227,44 +239,64 @@ def verify(dirs, verbose)
       values = s[k]
       if values.size > 0
         values.each do |t|
-          # if t.track_unused?
-            puts "%s:%d: warning: unused key '%s'" % [ s.path, t.line, k ]
-          # end
+          puts "%s:%d: warning: unused key '%s'" % [ s.path, t.line, k ]
+          ret = 1
         end
       end
+    end
+  end
+
+  # fixing
+
+  # remove unused keys
+  unused_keys.each do |k|
+    strings.each do |s|
+      puts "removing missing key '#{k}' from #{s.language}"
+      s.remove(k)
     end
   end
 
   # add missing keys
-  # if !duplicates && missing_keys.length > 0
-    missing_keys.each do |k|
-      strings.each do |s|
-        values = s[k]
-        if values.size == 0
-          puts "adding missing key '#{k}' to #{s.language}"
-          s << Translation.new('', 1, k, k, s.language)
-        end
+  missing_keys.each do |k|
+    strings.each do |s|
+      values = s[k]
+      if values.size == 0
+        puts "adding missing key '#{k}' to #{s.language}"
+        s << Translation.new('', 1, k, k, s.language)
       end
     end
+  end
+
+  if fix
     strings.each do |s|
       puts "writing #{s.path}"
       s.save
     end
-  # end
+  end
 
   return ret
 end
 
-ret = if ARGV.length == 0
-  ignorefile = ".verifystringsignore"
-  reject = {}
-  if File.exists?(ignorefile)
-    reject = File.open(ignorefile) { |f| f.readlines }.map { |l| l.strip }
-    puts "Ingoring #{reject}"
-  end
-  verify(Dir.glob(File.join(ENV['PROJECT_DIR'] || ".", "*"), 0).reject { |s| reject.include?(File.basename(s)) }, true)
+xcode = ENV['PROJECT_DIR'].to_s != ""
+
+if xcode
+  puts "running via Xcode"
+  verbose = true
+  fix = false
 else
-  verify(ARGV, false)
+  puts "running via command line"
+  verbose = true
+  fix = true
 end
 
-exit ret
+ignorefile = ".verifystringsignore"
+reject = {}
+if File.exists?(ignorefile)
+  reject = File.open(ignorefile) { |f| f.readlines }.map { |l| l.strip }
+  puts "Ingoring #{reject}"
+end
+
+dir = ENV['PROJECT_DIR'] || "."
+files = Dir.glob(File.join(dir, "*"), 0).reject { |s| reject.include?(File.basename(s)) }
+
+exit verify(files, verbose, fix)
