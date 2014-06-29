@@ -183,7 +183,7 @@ def verify(dirs, verbose, fix)
       unused_keys.delete(key)
     else
       missing_keys << key
-      puts "%s:%d: error: code missing key '%s'" % [ path, lc, key ]
+      puts "%s:%d: error: code uses missing key '%s'" % [ path, lc, key ]
       ret = 1
     end
   end
@@ -193,7 +193,7 @@ def verify(dirs, verbose, fix)
       unused_keys.delete(key)
     else
       missing_keys << key
-      puts "%s:%d: error: xib missing key '%s'" % [ path, lc, key ]
+      puts "%s:%d: error: xib uses missing key '%s'" % [ path, lc, key ]
       ret = 1
     end
   end
