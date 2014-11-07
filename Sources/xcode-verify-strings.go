@@ -46,12 +46,26 @@ func (this StringsFile) Translations(key string) []Translation {
   return ret
 }
 
+func glob(dir string, ext string) ([]string, error) {
+
+  files := []string{}
+  err := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
+    if filepath.Ext(path) == ext {
+      files = append(files, path)
+      // fmt.Printf("found %s (%s)\n", path, filepath.Ext(path))
+    }
+    return nil
+  })
+
+  return files, err
+}
+
 func strings_keys(dirs []string, yield func(path string, lc int, key string, value string, pre string, language string)) {
   r, _ := regexp.Compile("([^\\/]*)\\.lproj")
 
   for _, dir := range dirs {
     // files, _ := filepath.Glob(dir + "/**/*.lproj/*.strings")
-    files, _ := filepath.Glob(dir + "/*/*.lproj/*.strings")
+    files, _ := glob(dir, ".strings")
     for _, file := range files {
 
       match := r.FindStringSubmatch(file)
@@ -149,7 +163,8 @@ func strings_keys(dirs []string, yield func(path string, lc int, key string, val
 func xib_keys(dirs []string, yield func(path string, key string)) {
 
   for _, dir := range dirs {
-    files, _ := filepath.Glob(dir + "/**/*.xib")
+    // files, _ := filepath.Glob(dir + "/**/*.xib")
+    files, _ := glob(dir, ".xib")
     for _, file := range files {
       // fmt.Printf("reading %s\n", file)
       content, _ := ioutil.ReadFile(file)
@@ -198,7 +213,8 @@ func code_keys(dirs []string, yield func(path string, lc int, key string)) {
   r, _ := regexp.Compile("NSLocalizedString\\(@\"(.*?)\",")
 
   for _, dir := range dirs {
-    files, _ := filepath.Glob(dir + "/**/*.m")
+    // files, _ := filepath.Glob(dir + "/**/*.m")
+    files, _ := glob(dir, ".m")
 
     for _, file := range files {
 
@@ -357,13 +373,15 @@ func main() {
   content, _ := ioutil.ReadFile(dir + "/.verifystringsignore")
   lines := strings.Split(string(content), "\n")
 
-  files, _ := filepath.Glob(dir + "/*")
+  files, _ := filepath.Glob(dir + "/[^\\.]*")
   files_filtered := []string{}
   for _, file := range files {
-    if contains(lines, filepath.Base(file)) {
-      // fmt.Printf("ignoring '%s'\n", file)
-    } else {
-      files_filtered = append(files_filtered, file)
+    if !strings.HasPrefix(file, ".") {
+      if contains(lines, filepath.Base(file)) {
+        // fmt.Printf("ignoring '%s'\n", file)
+      } else {
+        files_filtered = append(files_filtered, file)
+      }
     }
   }
 
