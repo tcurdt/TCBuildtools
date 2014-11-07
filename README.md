@@ -31,12 +31,9 @@ The code is released under the Apache License 2.0.
 
 # Localizable String verifications
 
-1. make sure `rbenv` is installed and you did `gem install nokogiri` at some stage
-2. create an (or add to an existing) "Aggregate Target" called "Buildtools"
-3. add a "run script" build phase to the new target calling
+1. create an (or add to an existing) "Aggregate Target" called "Buildtools"
+2. add a "run script" build phase to the new target calling
 
-	    export PATH="$HOME/.rbenv/bin:$PATH"
-	    eval "$(rbenv init -)"
 	    $PROJECT_DIR/Pods/TCBuildtools/Scripts/xcode-verify-strings
 
 4. Optional: Create a `.verifystringsignore` file excluding
